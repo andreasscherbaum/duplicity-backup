@@ -1042,19 +1042,11 @@ sub get_backup_path_status {
     $status{'last_incremental_backup'} = undef;
     $status{'error_in_sets'} = 1;
 
-    my $found_collection_status = 0;
     my $found_inside_chain = 0;
 
     foreach my $line (@status) {
         if ($line =~ /^No orphaned or incomplete backup sets found/) {
             $status{'error_in_sets'} = 0;
-        }
-        if ($line =~ /^Collection Status/) {
-            $found_collection_status = 1;
-            next;
-        }
-        if ($found_collection_status == 0) {
-            next;
         }
 
         if (substr($line, 0, 15) eq '---------------' and $found_inside_chain == 1) {
