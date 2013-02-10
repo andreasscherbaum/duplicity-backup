@@ -785,6 +785,23 @@ sub run_backup {
     }
 
 
+    # cleanup old stuff
+    my @cleanup_execute = ();
+    push(@cleanup_execute, 'cleanup');
+    push(@cleanup_execute, '--force');
+    push(@cleanup_execute, '--extra-clean');
+    push(@cleanup_execute, $backup_path);
+    my $start_time_cleanup = [gettimeofday];
+    my ($cleanup_status, $cleanup_return) = execute_duplicity_command(join(" ", @cleanup_execute), $logfile_prefix . 'cleanup.txt');
+    my $end_time_cleanup = [gettimeofday];
+    my $run_time_cleanup = int(100 * tv_interval($start_time_cleanup, $end_time_cleanup)) / 100;
+    if ($cleanup_status != 0) {
+        print_msg("cleaning up failed", ERROR);
+        return 0;
+    }
+    print_msg("time for cleanup: $run_time_cleanup seconds", INFO);
+
+
     # get list of existing backups
     my $start_time_status = [gettimeofday];
     my $this_backup_path_info = get_backup_path_status($backup, $backup_path, $logfile_prefix);
