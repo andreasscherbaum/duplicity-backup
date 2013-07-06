@@ -1178,13 +1178,18 @@ sub complete_backup_path {
         my $path = $backup_target . (($backup_target !~ /\/$/) ? '/' : '') . $backup_target_sub_directory;
         print_msg("full backup path: $path", DEBUG);
         return $path;
-    } elsif ($backup_target =~ /^ftp:\/\/(.+)$/) {
+    } elsif ($backup_target =~ /^s?ftp:\/\/(.+)$/) {
         my $tmp_path = $1;
 
         # path must contain a username, a host and optional a directory
         my $tmp_username = undef;
         my $tmp_hostname = $tmp_path;
         my $tmp_pathname = undef;
+        my $tmp_port = 21;
+        if ($tmp_hostname =~ /^(.+):[0-9]+$/) {
+            $tmp_hostname = $1;
+            $tmp_port = $2;
+        }
         if ($tmp_hostname =~ /^([^\@]+)\@(.+)$/) {
             $tmp_username = $1;
             $tmp_hostname = $2; 
@@ -1206,7 +1211,7 @@ sub complete_backup_path {
             $tmp_password = '';
         }
 
-        my $ftp = Net::FTP->new($tmp_hostname, Port => 21);
+        my $ftp = Net::FTP->new($tmp_hostname, Port => $tmp_port);
         if (!$ftp) {
             print_msg("can't connect to ftp server: $@", ERROR);
             return undef;
