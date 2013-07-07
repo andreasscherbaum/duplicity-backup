@@ -1186,8 +1186,8 @@ sub complete_backup_path {
         my $tmp_hostname = $tmp_path;
         my $tmp_pathname = undef;
         my $tmp_port = 21;
-        if ($tmp_hostname =~ /^(.+):[0-9]+$/) {
-            $tmp_hostname = $1;
+        if ($tmp_hostname =~ /^(.+):([0-9]+)(.*)$/) {
+            $tmp_hostname = $1 . $3;
             $tmp_port = $2;
         }
         if ($tmp_hostname =~ /^([^\@]+)\@(.+)$/) {
