@@ -1178,7 +1178,7 @@ sub complete_backup_path {
         my $path = $backup_target . (($backup_target !~ /\/$/) ? '/' : '') . $backup_target_sub_directory;
         print_msg("full backup path: $path", DEBUG);
         return $path;
-    } elsif ($backup_target =~ /^s?ftp:\/\/(.+)$/) {
+    } elsif ($backup_target =~ /^ftp:\/\/(.+)$/) {
         my $tmp_path = $1;
 
         # path must contain a username, a host and optional a directory
@@ -1211,6 +1211,7 @@ sub complete_backup_path {
             $tmp_password = '';
         }
 
+        eval('use Net::FTP;');
         my $ftp = Net::FTP->new($tmp_hostname, Port => $tmp_port);
         if (!$ftp) {
             print_msg("can't connect to ftp server: $@", ERROR);
@@ -1241,7 +1242,73 @@ sub complete_backup_path {
             print_msg("subdirectory ($backup_target_sub_directory) in backup directory ($tmp_pathname) created", INFO);
         }
 
-        my $path = 'ftp://' . $tmp_username . '@' . $tmp_hostname . $tmp_pathname . (($tmp_pathname !~ /\/$/) ? '/' : '') . $backup_target_sub_directory . (($backup_target_sub_directory !~ /\/$/) ? '/' : '');
+        my $path = 'ftp://' . $tmp_username . '@' . $tmp_hostname . ':' . $tmp_port . $tmp_pathname . (($tmp_pathname !~ /\/$/) ? '/' : '') . $backup_target_sub_directory . (($backup_target_sub_directory !~ /\/$/) ? '/' : '');
+        print_msg("full backup path: $path", DEBUG);
+        return $path;
+    } elsif ($backup_target =~ /^sftp:\/\/(.+)$/) {
+        my $tmp_path = $1;
+
+        # path must contain a username, a host and optional a directory
+        my $tmp_username = undef;
+        my $tmp_hostname = $tmp_path;
+        my $tmp_pathname = undef;
+        my $tmp_port = 21;
+        if ($tmp_hostname =~ /^(.+?):([0-9]+)(.*)$/) {
+            $tmp_hostname = $1 . $3;
+            $tmp_port = $2;
+        }
+        if ($tmp_hostname =~ /^([^\@]+)\@(.+)$/) {
+            $tmp_username = $1;
+            $tmp_hostname = $2; 
+        }
+        if ($tmp_hostname =~ /^([^\/]+)(\/.*)$/) {
+            $tmp_hostname = $1;
+            $tmp_pathname = $2;
+        }
+        if (!defined($tmp_username)) {
+            print_msg("username missing in ftp declaration ($backup_target)", ERROR);
+            return undef;
+        }
+        if (!defined($tmp_pathname)) {
+            $tmp_pathname = '/';
+        }
+        my $tmp_password = config_get_key3('backup', $backup, 'ftp-password');
+        if (!defined($tmp_password)) {
+            print_msg("no ftp password found, assuming empty password", DEBUG);
+            $tmp_password = '';
+        }
+
+        my $eval = eval('use Net::SFTP::Foreign');
+        if (!defined($eval) and $@) {
+            print_msg("can't load Net::SFTP::Foreign module: $@", ERROR);
+            return undef;
+        }
+        my $ftp = Net::SFTP::Foreign->new($tmp_hostname, user => $tmp_username, password => $tmp_password, port => => $tmp_port);
+        if ($ftp->error) {
+            print_msg("can't connect to sftp server: " . $ftp->error, ERROR);
+            return undef;
+        }
+
+        # see that the backup target directory exists
+        if (!$ftp->setcwd($tmp_pathname)) {
+            print_msg("backup target directory does not exist: $tmp_pathname", ERROR);
+            $ftp->disconnect();
+            return undef;
+        }
+
+
+        # see that the subdirectory exists, if not create it
+        if (!$ftp->setcwd($backup_target_sub_directory)) {
+            if (!$ftp->mkdir($backup_target_sub_directory)) {
+                print_msg("cannot create subdirectory ($backup_target_sub_directory) in backup directory ($tmp_pathname): $!", ERROR);
+                $ftp->disconnect();
+                return undef;
+            }
+            print_msg("subdirectory ($backup_target_sub_directory) in backup directory ($tmp_pathname) created", INFO);
+        }
+
+        $ftp->disconnect();
+        my $path = '--ssh-askpass --ssh-backend pexpect sftp://' . $tmp_username . '@' . $tmp_hostname . ':' . $tmp_port . $tmp_pathname . (($tmp_pathname !~ /\/$/) ? '/' : '') . $backup_target_sub_directory . (($backup_target_sub_directory !~ /\/$/) ? '/' : '');
         print_msg("full backup path: $path", DEBUG);
         return $path;
     } else {
