@@ -631,9 +631,9 @@ foreach my $backup (@backups) {
     print_msg("Backup task: " . $backup, INFO);
     my $status = run_backup($backup);
     if ($status == 0) {
-        print_msg("backup task did not run, because of errors", ERROR);
+        print_msg("backup task '$backup' did not run, because of errors", ERROR);
     } elsif ($status == 1) {
-        print_msg("backup task finished successfully", INFO);
+        print_msg("backup task '$backup' finished successfully", INFO);
     }
 }
 
