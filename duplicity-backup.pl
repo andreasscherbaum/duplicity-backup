@@ -1121,6 +1121,9 @@ sub execute_duplicity_command {
 
     print_msg("execute: $execute", DEBUG);
 
+    $ENV{'LC_ALL'} = 'C';
+    $ENV{'LANG'} = 'C';
+    $ENV{'LANGUAGE'} = 'C';
     my @return = `$execute`;
     my $return = $?;
 
