@@ -521,6 +521,7 @@ $main::loglevel = INFO;
 # defaults
 $main::help              = 0;
 $main::debug             = 0;
+$main::quiet             = 0;
 $main::config_file       = "";
 $main::status            = 0;
 $main::cleanup_old_logs  = 0;
@@ -529,6 +530,7 @@ unless (
     GetOptions(
         'help|h|?'         => \$main::help,
         'debug|d'          => \$main::debug,
+        'quiet|q'          => \$main::quiet,
         'config|c=s'       => \$main::config_file,
         'logfile|l=s'      => \$main::logfile,
         'status|s'         => \$main::status,
@@ -541,6 +543,9 @@ unless (
 
 if ($main::debug == 1) {
     $main::loglevel = DEBUG;
+}
+if ($main::quiet == 1) {
+    $main::loglevel = ERROR;
 }
 
 
