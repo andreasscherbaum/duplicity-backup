@@ -482,6 +482,7 @@ use Data::Dumper;
 use YAML::XS qw (/./);
 use Date::Manip;
 use Date::Parse;
+use Time::Duration;
 use Time::Duration::Parse;
 use Time::HiRes qw( gettimeofday tv_interval );
 use Net::FTP;
@@ -525,6 +526,7 @@ $main::quiet             = 0;
 $main::config_file       = "";
 $main::status            = 0;
 $main::cleanup_old_logs  = 0;
+$main::monitoring        = 0;
 # parse options
 unless (
     GetOptions(
@@ -535,6 +537,7 @@ unless (
         'logfile|l=s'      => \$main::logfile,
         'status|s'         => \$main::status,
         'cleanup-old-logs' => \$main::cleanup_old_logs,
+        'monitoring|m'     => \$main::monitoring,
     )
 ) {
     # There were errors with parsing command line options - show help.
@@ -572,6 +575,8 @@ The following options are available:
   -c --config        Config file (required)
   -l --logfile       Logfile
   -s --status        Add backup status to output
+  -m --monitoring    Output monitoring status
+                     (make sure to add the -q option)
 
 _END_OF_HELP_
     exit(0);
@@ -627,21 +632,79 @@ print_msg("Initialization done, start backup", INFO);
 
 
 my @backups = config_get_keys1('backup');
-# walk through all backups
-foreach my $backup (@backups) {
-    if ($backup =~ /[^a-zA-Z0-9\-\_]/) {
-        print_msg("backup name ($backup) is invalid", ERROR);
-        next;
+if ($main::monitoring == 1) {
+    # check all backups for status
+    my $backup_status = 1;
+    my @backup_ok = ();
+    my @backup_warning = ();
+    my @backup_fail = ();
+    my @backup_unknown = ();
+    foreach my $backup (@backups) {
+        if ($backup =~ /[^a-zA-Z0-9\-\_]/) {
+            print_msg("backup name ($backup) is invalid", ERROR);
+            push (@backup_fail, $backup);
+            next;
+        }
+        # keep in mind that this line will be printed to STDOUT - and might confuse monitoring plugins
+        # use the -q option
+        print_msg("Backup task: " . $backup, INFO);
+        my $status = status_backup($backup);
+        if ($status == -1) {
+            # ignore
+        } elsif ($status == 0) {
+            # OK
+            push(@backup_ok, $backup);
+        } elsif ($status == 1) {
+            # WARNING
+            push(@backup_warning, $backup);
+        } elsif ($status == 2) {
+            # CRITICAL
+            push(@backup_fail, $backup);
+        } elsif ($status == 3) {
+            # UNKNOWN
+            push(@backup_unknown, $backup);
+        }
     }
-    print_msg("Backup task: " . $backup, INFO);
-    my $status = run_backup($backup);
-    if ($status == 0) {
-        print_msg("backup task '$backup' did not run, because of errors", ERROR);
-    } elsif ($status == 1) {
-        print_msg("backup task '$backup' finished successfully", INFO);
+    my @backup_results = ();
+    my $backup_result = 0;
+    if (scalar(@backup_fail) > 0) {
+        push(@backup_results, scalar(@backup_fail) . " backup" . ((scalar(@backup_fail) == 1) ? "" : "s") . " CRITICAL");
+        $backup_result = 2;
+    }
+    if (scalar(@backup_warning) > 0) {
+        push(@backup_results, scalar(@backup_warning) . " backup" . ((scalar(@backup_warning) == 1) ? "" : "s") . " WARNING");
+        if ($backup_result == 0) {
+            $backup_result = 1;
+        }
+    }
+    if (scalar(@backup_unknown) > 0) {
+        push(@backup_results, scalar(@backup_unknown) . " backup" . ((scalar(@backup_unknown) == 1) ? "" : "s") . " UNKNOWN");
+        if ($backup_result == 0) {
+            $backup_result = 3;
+        }
+    }
+    if (scalar(@backup_ok) > 0) {
+        push(@backup_results, scalar(@backup_ok) . " backup" . ((scalar(@backup_ok) == 1) ? "" : "s") . " OK");
+    }
+    # print to STDOUT instead of print_msg()
+    print join(", ", @backup_results) . "\n";
+    exit($backup_result);
+} else {
+    # walk through all backups
+    foreach my $backup (@backups) {
+        if ($backup =~ /[^a-zA-Z0-9\-\_]/) {
+            print_msg("backup name ($backup) is invalid", ERROR);
+            next;
+        }
+        print_msg("Backup task: " . $backup, INFO);
+        my $status = run_backup($backup);
+        if ($status == 0) {
+            print_msg("backup task '$backup' did not run, because of errors", ERROR);
+        } elsif ($status == 1) {
+            print_msg("backup task '$backup' finished successfully", INFO);
+        }
     }
 }
-
 
 
 
@@ -651,6 +714,197 @@ foreach my $backup (@backups) {
 ######################################################################
 # regular functions used by the backup
 ######################################################################
+
+
+# status_backup()
+#
+# retrieve backup status (from cached status files)
+#
+# parameter:
+#  - backup task name, from config
+# return:
+#  - return status
+#     0: OK
+#     1: WARNING
+#     2: CRITICAL
+#     3: UNKNOWN
+#    -1: ignore
+sub status_backup {
+    my $backup = shift;
+
+
+    my $backup_type                 = config_get_key3('backup', $backup, 'type');
+    my $backup_disabled             = config_get_key3('backup', $backup, 'disabled');
+    my $backup_incremental          = config_get_key3('backup', $backup, 'incremental');
+    my $backup_full_every           = config_get_key3('backup', $backup, 'full-every');
+    my $backup_incremental_every    = config_get_key3('backup', $backup, 'incremental-every');
+    my $backup_keep_full            = config_get_key3('backup', $backup, 'keep-full');
+    my $backup_cd_directory         = config_get_key3('backup', $backup, 'backup-cd-directory');
+    my $backup_this_directory       = config_get_key3('backup', $backup, 'backup-this-directory');
+    my $backup_target               = config_get_key3('backup', $backup, 'backup-target');
+    my $backup_target_sub_directory = config_get_key3('backup', $backup, 'backup-target-sub-directory');
+    my $backup_include              = config_get_key3('backup', $backup, 'include');
+    my $backup_exclude              = config_get_key3('backup', $backup, 'exclude');
+    my $config_add_time             = config_get_key2('config', 'monitoring-add-time');
+
+
+    # pre-flight checks
+    if (!defined($backup_disabled)) {
+        $backup_disabled = 'no';
+    }
+    if ($backup_disabled eq 'yes' or $backup_disabled eq '1') {
+        print_msg("task is disabled", INFO);
+        return -1;
+    }
+
+
+    if (defined($config_add_time) and length($config_add_time) > 0) {
+        $config_add_time = parse_duration($config_add_time);
+        print_msg("add additional $config_add_time seconds as safety", DEBUG);
+    } else {
+        $config_add_time = 0;
+    }
+
+
+    # looks for all $backup*-overview.txt files in cache
+    my $last_logfile = identify_last_logfile($backup, config_get_keys2('config', 'log-directory'));
+    if ($last_logfile eq "-1") {
+        print_msg("error identifying statusfile for backup: $backup", INFO);
+        return 2;
+    }
+    if ($last_logfile eq "") {
+        print_msg("no statusfile for backup: $backup", INFO);
+        return 3;
+    }
+
+    print_msg("using logfile $last_logfile for backup $backup", DEBUG);
+    my $fh = new FileHandle;
+    if (!open($fh, "<", $last_logfile)) {
+        print_msg("error opening statusfile ($last_logfile) for backup: $backup", INFO);
+        return 2;
+    }
+    my @file = <$fh>;
+    close($fh);
+    my $this_backup_path_info = parse_backup_status(\@file);
+
+
+    my %this_backup_path_info = %$this_backup_path_info;
+    print_msg("number of full backups: " . $this_backup_path_info{'number_full_backups'}, DEBUG);
+    if ($this_backup_path_info{'number_full_backups'} > 0) {
+        print_msg("last full backup: " . $this_backup_path_info{'last_full_backup'}, DEBUG);
+        if ($this_backup_path_info{'number_incremental_backups'} > 0) {
+            print_msg("number of incremental backups: " . $this_backup_path_info{'number_incremental_backups'}, DEBUG);
+            print_msg("last incremental backups: " . $this_backup_path_info{'last_incremental_backup'}, DEBUG);
+        }
+    }
+    if ($this_backup_path_info{'error_in_sets'} == 1) {
+        print_msg("errors in backup set found, please verify backup!", ERROR);
+        return 2;
+    }
+
+
+    # is full backup necessary?
+    my $need_full_backup = 0;
+    my $need_incremental_backup = 0;
+
+    if ($this_backup_path_info{'number_full_backups'} == 0) {
+        print_msg("no existing backup", INFO);
+        $need_full_backup = 1;
+    } else {
+        my $backup_full_duration = undef;
+        eval { $backup_full_duration = parse_duration($backup_full_every); };
+        if ($@) {
+            print_msg("full-every ($backup_full_every) is invalid", ERROR);
+            return 2;
+        }
+        print_msg("full backup every $backup_full_duration seconds ($backup_full_every)", DEBUG);
+        my $time_last_full_backup = str2time($this_backup_path_info{'last_full_backup'});
+        if (($time_last_full_backup + $backup_full_duration) < time()) {
+            if (($time_last_full_backup + $backup_full_duration + $config_add_time) < time()) {
+                print_msg("last full backup is " . duration_exact(time() - ($time_last_full_backup + $backup_full_duration)) . " too old, full backup required", DEBUG);
+                $need_full_backup = 1;
+            } else {
+                print_msg("last full backup is " . duration_exact(time() - ($time_last_full_backup + $backup_full_duration)) . " too old, but still in safety time", DEBUG);
+            }
+        } else {
+            print_msg("" . duration_exact(($time_last_full_backup + $backup_full_duration) - time()) . " until next full backup", DEBUG);
+        }
+    }
+
+
+    # if no full backup, is incremental backup allowed?
+    # if incremental backup allowed, is it necessary?
+    if ($need_full_backup == 0 and $backup_incremental eq 'yes') {
+        if ($this_backup_path_info{'number_incremental_backups'} == 0) {
+            # set last incremental backup timestamp to last full backup timestamp
+            $this_backup_path_info{'last_incremental_backup'} = $this_backup_path_info{'last_full_backup'};
+        }
+        my $backup_incremental_duration = undef;
+        eval { $backup_incremental_duration = parse_duration($backup_incremental_every); };
+        if ($@) {
+            print_msg("incremental-every ($backup_incremental_every) is invalid", ERROR);
+            return 2;
+        }
+        print_msg("incremental backup every $backup_incremental_duration seconds ($backup_incremental_every)", DEBUG);
+        my $time_last_incremental_backup = str2time($this_backup_path_info{'last_incremental_backup'});
+        if (($time_last_incremental_backup + $backup_incremental_duration) < time()) {
+            if (($time_last_incremental_backup + $backup_incremental_duration + $config_add_time) < time()) {
+                print_msg("last incremental backup is " . duration_exact(time() - ($time_last_incremental_backup + $backup_incremental_duration)) . " too old, incremental backup required", DEBUG);
+                $need_incremental_backup = 1;
+            } else {
+                print_msg("last incremental backup is " . duration_exact(time() - ($time_last_incremental_backup + $backup_incremental_duration)) . " too old, but still in safety time", DEBUG);
+            }
+        } else {
+            print_msg("" . duration_exact(($time_last_incremental_backup + $backup_incremental_duration) - time()) . " until next incremental backup", DEBUG);
+        }
+    }
+
+
+    if ($need_full_backup == 1 or $need_incremental_backup == 1) {
+        return 2;
+    }
+}
+
+
+# identify_last_logfile()
+#
+# search latest $backup*-overview.txt file in cache
+#
+# parameter:
+#  - backup name
+#  - cache directory
+# return:
+#  - filename, or "-1"
+# note:
+#  - will not attempt to retrieve status from backup, only the local cache is used
+sub identify_last_logfile {
+    my $backup = shift;
+    my $dir = shift;
+
+    my $dh = new FileHandle;
+    if (!opendir($dh, $dir)) {
+        print_msg("cannot open log directory ($dir): $!", ERROR);
+        return -1;
+    }
+
+    my @found = ();
+    while (my $file = readdir($dh)) {
+        if ($file =~ /^$backup\-\d+\-\d+\-overview.txt$/) {
+            push(@found, $file);
+        }
+    }
+    closedir($dh);
+
+    if (scalar(@found) == 0) {
+        return 0;
+    }
+
+    @found = sort(@found);
+
+    my $last = pop(@found);
+
+    return $dir . $last;
+}
 
 
 # run_backup()
@@ -1053,8 +1307,23 @@ sub get_backup_path_status {
 
     # ignore the return status
 
+    return parse_backup_status($return);
+}
 
-    my @status = @$return;
+
+# parse_backup_status()
+#
+# parse status information about a backup
+#
+# parameter:
+#  - pointer to array with lines
+# return:
+#  - pointer to hash with results
+sub parse_backup_status {
+    my $status = shift;
+
+
+    my @status = @$status;
     chomp(@status);
 
     my %status = ();
