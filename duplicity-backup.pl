@@ -705,18 +705,23 @@ sub main_monitoring {
         my $status = status_backup($backup);
         if ($status == -1) {
             # ignore
+            print_msg("Status: disabled", INFO);
         } elsif ($status == 0) {
             # OK
             push(@backup_ok, $backup);
+            print_msg("Status: OK", INFO);
         } elsif ($status == 1) {
             # WARNING
             push(@backup_warning, $backup);
+            print_msg("Status: WARNING", INFO);
         } elsif ($status == 2) {
             # CRITICAL
             push(@backup_fail, $backup);
+            print_msg("Status: CRITICAL", INFO);
         } elsif ($status == 3) {
             # UNKNOWN
             push(@backup_unknown, $backup);
+            print_msg("Status: UNKNOWN", INFO);
         }
     }
 
