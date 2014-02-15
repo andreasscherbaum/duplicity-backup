@@ -631,8 +631,62 @@ print_msg("Initialization done, start backup", INFO);
 
 
 
-my @backups = config_get_keys1('backup');
 if ($main::monitoring == 1) {
+    main_monitoring();
+    exit(0);
+} else {
+    main_backup();
+    exit(0);
+}
+
+
+
+
+
+######################################################################
+# regular functions used by the backup
+######################################################################
+
+
+# main_backup()
+#
+# main routine doing the backup
+#
+# parameter:
+#  none
+# return:
+#  none
+sub main_backup {
+    my @backups = config_get_keys1('backup');
+
+    # walk through all backups
+    foreach my $backup (@backups) {
+        if ($backup =~ /[^a-zA-Z0-9\-\_]/) {
+            print_msg("backup name ($backup) is invalid", ERROR);
+            next;
+        }
+        print_msg("Backup task: " . $backup, INFO);
+        my $status = run_backup($backup);
+        if ($status == 0) {
+            print_msg("backup task '$backup' did not run, because of errors", ERROR);
+        } elsif ($status == 1) {
+            print_msg("backup task '$backup' finished successfully", INFO);
+        }
+    }
+}
+
+
+# main_monitoring()
+#
+# main routine doing the monitoring
+#
+# parameter:
+#  none
+# return:
+#  none
+sub main_monitoring {
+    my @backups = config_get_keys1('backup');
+
     # check all backups for status
     my $backup_status = 1;
     my @backup_ok = ();
@@ -665,6 +719,7 @@ if ($main::monitoring == 1) {
             push(@backup_unknown, $backup);
         }
     }
+
     my @backup_results = ();
     my $backup_result = 0;
     if (scalar(@backup_fail) > 0) {
@@ -686,34 +741,11 @@ if ($main::monitoring == 1) {
     if (scalar(@backup_ok) > 0) {
         push(@backup_results, scalar(@backup_ok) . " backup" . ((scalar(@backup_ok) == 1) ? "" : "s") . " OK");
     }
+
     # print to STDOUT instead of print_msg()
     print join(", ", @backup_results) . "\n";
     exit($backup_result);
-} else {
-    # walk through all backups
-    foreach my $backup (@backups) {
-        if ($backup =~ /[^a-zA-Z0-9\-\_]/) {
-            print_msg("backup name ($backup) is invalid", ERROR);
-            next;
-        }
-        print_msg("Backup task: " . $backup, INFO);
-        my $status = run_backup($backup);
-        if ($status == 0) {
-            print_msg("backup task '$backup' did not run, because of errors", ERROR);
-        } elsif ($status == 1) {
-            print_msg("backup task '$backup' finished successfully", INFO);
-        }
-    }
 }
-
-
-
-
-
-
-######################################################################
-# regular functions used by the backup
-######################################################################
 
 
 # status_backup()
