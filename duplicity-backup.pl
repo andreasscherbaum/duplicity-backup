@@ -661,10 +661,6 @@ sub main_backup {
 
     # walk through all backups
     foreach my $backup (@backups) {
-        if ($backup =~ /[^a-zA-Z0-9\-\_]/) {
-            print_msg("backup name ($backup) is invalid", ERROR);
-            next;
-        }
         print_msg("Backup task: " . $backup, INFO);
         my $status = run_backup($backup);
         if ($status == 0) {
@@ -694,11 +690,6 @@ sub main_monitoring {
     my @backup_fail = ();
     my @backup_unknown = ();
     foreach my $backup (@backups) {
-        if ($backup =~ /[^a-zA-Z0-9\-\_]/) {
-            print_msg("backup name ($backup) is invalid", ERROR);
-            push (@backup_fail, $backup);
-            next;
-        }
         # keep in mind that this line will be printed to STDOUT - and might confuse monitoring plugins
         # use the -q option
         print_msg("Backup task: " . $backup, INFO);
@@ -1833,6 +1824,24 @@ sub validate_config {
     }
     if (config_get_key2('config', 'volsize') !~ /^\d+$/) {
         die("Please validate config value 'config:volsize'\n");
+    }
+
+    # pre-verify backups and backup targets
+    my @backups = config_get_keys1('backup');
+    my %seen_before = ();
+
+    foreach my $backup (@backups) {
+        if ($backup =~ /[^a-zA-Z0-9\-\_]/) {
+            die("backup name ($backup) is invalid");
+        }
+
+        my $backup_target               = config_get_key3('backup', $backup, 'backup-target');
+        my $backup_target_sub_directory = config_get_key3('backup', $backup, 'backup-target-sub-directory');
+        my $backup_target_key = $backup_target . '|' . $backup_target_sub_directory;
+        if (defined($seen_before{$backup_target_key}) and $seen_before{$backup_target_key} == 1) {
+            die("backup target for '$backup' already seen earlier in config file\n");
+        }
+        $seen_before{$backup_target_key} = 1;
     }
 
     print_msg("Configuration validated", DEBUG);
