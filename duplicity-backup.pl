@@ -486,7 +486,6 @@ use Time::Duration;
 use Time::Duration::Parse;
 use Time::HiRes qw( gettimeofday tv_interval );
 use Net::FTP;
-use feature qw/switch/;
 import backup::config;
 
 
@@ -1176,14 +1175,12 @@ sub run_backup {
         }
         print_msg("chdir into $backup_cd_directory", DEBUG);
 
-        given($backup_type) {
-            # here is the right place to do preparations for the backup
-            when ('file') {
-                if (!prepare_backup_file($backup, $backup_cd_directory, $backup_this_directory)) {
-                    return 0;
-                }
+        # here is the right place to do preparations for the backup
+        if ($backup_type eq 'file') {
+            if (!prepare_backup_file($backup, $backup_cd_directory, $backup_this_directory)) {
+                return 0;
             }
-        }
+        } # place preparations for other backup types here
 
         my @backup_include = ();
         if (defined($backup_include) and length($backup_include)) {
