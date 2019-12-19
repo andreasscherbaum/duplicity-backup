@@ -570,7 +570,6 @@ if ($main::help == 1) {
 The following options are available:
   -h --help          This help
   -d --debug         Enable debug messages
-  -D --debug-irc     Enable IRC traffic debugging
   -c --config        Config file (required)
   -l --logfile       Logfile
   -s --status        Add backup status to output
