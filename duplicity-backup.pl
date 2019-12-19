@@ -624,6 +624,19 @@ if ($check_log_directory !~ /\/$/) {
 }
 
 
+my $check_archive_directory = config_get_keys2('config', 'archive-directory');
+if (!defined($check_archive_directory) or length($check_archive_directory) == 0) {
+    # set to an empty value, will not be used later
+    config_set_key2('config', 'archive-directory', '');
+    print_msg("no archive-dir is used", DEBUG);
+} else {
+    if (!-d $check_archive_directory) {
+        print_msg("global archive-directory must exist", ERROR);
+        exit(1);
+    }
+    print_msg("archive-dir is: $check_archive_directory", DEBUG);
+}
+
 
 print_msg("Initialization done, start backup", INFO);
 
@@ -1070,11 +1083,21 @@ sub run_backup {
     }
 
 
+    my $archive_dir = config_get_key2('config', 'archive-directory');
+    print_msg("archive directory: " . $archive_dir, DEBUG);
+    if (length($archive_dir) > 0) {
+        push(@execute, '--archive-dir=' . $archive_dir);
+    }
+
+
     # cleanup old stuff
     my @cleanup_execute = ();
     push(@cleanup_execute, 'cleanup');
     push(@cleanup_execute, '--force');
     push(@cleanup_execute, '--extra-clean');
+    if (length($archive_dir) > 0) {
+        push(@cleanup_execute, '--archive-dir=' . $archive_dir);
+    }
     push(@cleanup_execute, $backup_path);
     my $start_time_cleanup = [gettimeofday];
     my ($cleanup_status, $cleanup_return) = execute_duplicity_command(join(" ", @cleanup_execute), $logfile_prefix . 'cleanup.txt');
@@ -1229,6 +1252,9 @@ sub run_backup {
         push(@delete_execute, 'remove-all-but-n-full');
         push(@delete_execute, $backup_keep_full);
         push(@delete_execute, '--force');
+        if (length($archive_dir) > 0) {
+            push(@delete_execute, '--archive-dir=' . $archive_dir);
+        }
         push(@delete_execute, $backup_path);
         my $start_time_delete = [gettimeofday];
         my ($delete_status, $delete_return) = execute_duplicity_command(join(" ", @delete_execute), $logfile_prefix . 'remove.txt');
@@ -1246,6 +1272,9 @@ sub run_backup {
     if ($main::status == 1) {
         my @status_execute = ();
         push(@status_execute, 'collection-status');
+        if (length($archive_dir) > 0) {
+            push(@status_execute, '--archive-dir=' . $archive_dir);
+        }
         push(@status_execute, $backup_path);
         my $start_time_status = [gettimeofday];
         my ($status_status, $status_return) = execute_duplicity_command(join(" ", @status_execute), $logfile_prefix . 'overview.txt');
@@ -1321,7 +1350,13 @@ sub get_backup_path_status {
     my $logfile_prefix = shift;
 
 
-    my ($status, $return) = execute_duplicity_command('collection-status' . ' ' . $backup_path, $logfile_prefix . 'status.txt');
+    my $archive_dir = config_get_key2('config', 'archive-directory');
+    if (length($archive_dir) > 0) {
+        $archive_dir = '--archive-dir=' . $archive_dir . ' ';
+    }
+
+
+    my ($status, $return) = execute_duplicity_command('collection-status' . ' ' . $archive_dir . $backup_path, $logfile_prefix . 'status.txt');
 
 
     if (!defined($return)) {
