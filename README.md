@@ -2,7 +2,7 @@ duplicity-backup.pl - wrapper around "duplicity"
 
 
 
-== General functionality ==
+## General functionality
 
 The backup software is built on top of an open source software
 called "duplicity". The website of the software is:
@@ -20,7 +20,7 @@ The backup program controls the following characteristics:
 
 
 
-== License ==
+## License
 
 "duplicity-backup.pl" is released under the PostgreSQL License,
 a liberal Open Source license, similar to the BSD or MIT
@@ -50,7 +50,7 @@ ENHANCEMENTS, OR MODIFICATIONS.
 
 
 
-== Sponsor ==
+## Sponsor
 
 I would like to take this opportunity to thank the sponsor of
 this software:
@@ -60,28 +60,33 @@ http://www.eisbaer.de/
 
 
 
-== Additional required software ==
+## Additional required software
 
 The following packages are required on Debian/Ubuntu:
 
-duplicity ncftp libyaml-libyaml-perl libyaml-tiny-perl
-libregexp-common-perl libdate-manip-perl
-libtime-duration-parse-perl
+* duplicity
+* ncftp
+* libyaml-libyaml-perl
+* libyaml-tiny-perl
+* libregexp-common-perl
+* libdate-manip-perl
+* libtime-duration-parse-perl
 
 
 
-== Using cron to run the backup ==
+## Using cron to run the backup
 
 An example cronjob using "duplicity-backup.pl":
 
-
+```
 0 2 * * * root /root/duplicity-backup.pl -c /root/duplicity.conf -s --cleanup-old-logs
+```
 
 With this call, the program starts every night at 2 o `clock.
 
 
 
-== Command line parameters ==
+## Command line parameters
 
 "duplicity-backup.pl" accepts the following command line parameters:
 -h / --help		Display help
@@ -93,7 +98,7 @@ With this call, the program starts every night at 2 o `clock.
 
 
 
-== Configuration file format ==
+## Configuration file format
 
 The configuration file uses YAML and is easy to change using
 an editor. There are two main categories:
@@ -139,14 +144,14 @@ See the "duplicity-backup.conf" example file.
 Note: the password in this file is *not* my regular backup password ;-)
 
 
-== Other operations ==
+## Other operations
 
 Since "duplicity-backup.pl" is just a wrapper around "duplicity"
 to create backups, the restore of a file is done using "duplicity".
 Following are some examples how to use "duplicity":
 
 
-=== List all backups ===
+### List all backups
 
 export PASSPHRASE="backup password"
 export FTP_PASSWORD="ftp password"
@@ -157,14 +162,14 @@ Specifying FTP_PASSWORD is only required if a FTP server is
 used as backup target.
 
 
-=== List all files in a backup ===
+### List all files in a backup
 
 export PASSPHRASE="backup password"
 export FTP_PASSWORD="ftp password"
 duplicity list-current <backup-target>/<backup-target-sub-directory>
 
 
-=== Restore a file from backup ===
+### Restore a file from backup
 
 export PASSPHRASE="backup password"
 export FTP_PASSWORD="ftp password"
@@ -176,9 +181,9 @@ an older version of a file from the backup.
 
 
 
-== Further readings ==
+## Further readings
 
 
-http://duplicity.nongnu.org/
-https://help.ubuntu.com/community/DuplicityBackupHowto
-http://en.wikipedia.org/wiki/Duplicity_(software)
+* http://duplicity.nongnu.org/
+* https://help.ubuntu.com/community/DuplicityBackupHowto
+* http://en.wikipedia.org/wiki/Duplicity_(software)
